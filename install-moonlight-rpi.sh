@@ -72,7 +72,19 @@ install_moonlight() {
     
     # Add Moonlight repository
     print_info "Adding Moonlight Qt repository..."
-    curl -1sLf 'https://dl.cloudsmith.io/public/moonlight-game-streaming/moonlight-qt/setup.deb.sh' | distro=raspbian codename=$(lsb_release -cs) sudo -E bash
+    print_warning "Downloading and executing repository setup script from Cloudsmith..."
+    
+    # Download the script first
+    local TEMP_SCRIPT=$(mktemp)
+    if ! curl -1sLf 'https://dl.cloudsmith.io/public/moonlight-game-streaming/moonlight-qt/setup.deb.sh' -o "$TEMP_SCRIPT"; then
+        print_error "Failed to download repository setup script"
+        rm -f "$TEMP_SCRIPT"
+        exit 1
+    fi
+    
+    # Execute the script
+    distro=raspbian codename=$(lsb_release -cs) sudo -E bash "$TEMP_SCRIPT"
+    rm -f "$TEMP_SCRIPT"
     
     # Update package list
     print_info "Updating package list..."
@@ -140,28 +152,44 @@ configure_gpu_memory() {
     read -p "Do you have a 4K 60 Hz monitor? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        # Check if gpu_mem is already set
-        if grep -q "^gpu_mem=" /boot/config.txt 2>/dev/null || grep -q "^gpu_mem=" /boot/firmware/config.txt 2>/dev/null; then
-            print_info "GPU memory is already configured"
+        # Check which config file exists
+        local CONFIG_FILE=""
+        if [ -f /boot/firmware/config.txt ]; then
+            CONFIG_FILE="/boot/firmware/config.txt"
+        elif [ -f /boot/config.txt ]; then
+            CONFIG_FILE="/boot/config.txt"
+        else
+            print_error "Could not find config.txt file"
+            return
+        fi
+        
+        # Check if gpu_mem is already set to 128 or higher
+        local CURRENT_GPU_MEM=$(grep "^gpu_mem=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2)
+        if [ -n "$CURRENT_GPU_MEM" ] && [ "$CURRENT_GPU_MEM" -ge 128 ] 2>/dev/null; then
+            print_info "GPU memory is already configured to ${CURRENT_GPU_MEM}MB"
         else
             print_info "For 4K 60 Hz displays, GPU memory needs to be increased to 128MB"
-            read -p "Do you want to configure GPU memory now? (Y/n): " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                # Check which config file exists
-                if [ -f /boot/firmware/config.txt ]; then
-                    CONFIG_FILE="/boot/firmware/config.txt"
-                elif [ -f /boot/config.txt ]; then
-                    CONFIG_FILE="/boot/config.txt"
-                else
-                    print_error "Could not find config.txt file"
-                    return
+            
+            # Check if there's an existing gpu_mem setting that needs updating
+            if [ -n "$CURRENT_GPU_MEM" ]; then
+                print_warning "Current gpu_mem is set to ${CURRENT_GPU_MEM}MB (less than 128MB)"
+                read -p "Do you want to update it to 128MB? (Y/n): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                    print_info "Updating gpu_mem to 128 in $CONFIG_FILE..."
+                    sudo sed -i "s/^gpu_mem=.*/gpu_mem=128/" "$CONFIG_FILE"
+                    print_success "GPU memory updated to 128MB"
+                    print_warning "You need to reboot for this change to take effect"
                 fi
-                
-                print_info "Adding gpu_mem=128 to $CONFIG_FILE..."
-                echo "gpu_mem=128" | sudo tee -a $CONFIG_FILE
-                print_success "GPU memory configured"
-                print_warning "You need to reboot for this change to take effect"
+            else
+                read -p "Do you want to configure GPU memory now? (Y/n): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                    print_info "Adding gpu_mem=128 to $CONFIG_FILE..."
+                    echo "gpu_mem=128" | sudo tee -a "$CONFIG_FILE"
+                    print_success "GPU memory configured to 128MB"
+                    print_warning "You need to reboot for this change to take effect"
+                fi
             fi
         fi
     fi
@@ -231,15 +259,13 @@ main() {
     # Display tips
     display_tips
     
-    # Check if reboot is needed
-    if ! groups $USER | grep -q '\binput\b' && [ -n "$REPLY" ]; then
-        print_warning "A reboot is recommended to apply all changes"
-        read -p "Do you want to reboot now? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            print_info "Rebooting..."
-            sudo reboot
-        fi
+    # Check if reboot is needed (based on input group or gpu_mem changes)
+    print_warning "A reboot is recommended if you made configuration changes"
+    read -p "Do you want to reboot now? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Rebooting..."
+        sudo reboot
     fi
 }
 

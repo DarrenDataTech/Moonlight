@@ -7,18 +7,19 @@ This repository contains an automated installation script for Moonlight Qt on Ra
 
 ### Quick Install
 
-To install Moonlight Qt on your Raspberry Pi, run:
+To install Moonlight Qt on your Raspberry Pi:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/DarrenDataTech/Moonlight/main/install-moonlight-rpi.sh | bash
-```
-
-Or download and run manually:
-
+**Method 1: Download and inspect first (recommended)**
 ```bash
 wget https://raw.githubusercontent.com/DarrenDataTech/Moonlight/main/install-moonlight-rpi.sh
+cat install-moonlight-rpi.sh  # Inspect the script
 chmod +x install-moonlight-rpi.sh
 ./install-moonlight-rpi.sh
+```
+
+**Method 2: Direct execution (if you trust the source)**
+```bash
+curl -fsSL https://raw.githubusercontent.com/DarrenDataTech/Moonlight/main/install-moonlight-rpi.sh | bash
 ```
 
 ### What the Script Does
