@@ -71,8 +71,23 @@ check_os_version() {
 install_moonlight() {
     print_info "Installing Moonlight Qt..."
     
+    # Check if lsb_release is available
+    if ! command -v lsb_release &> /dev/null; then
+        print_info "Installing lsb-release package..."
+        sudo apt update
+        sudo apt install -y lsb-release
+    fi
+    
     # Add Moonlight repository
     print_info "Adding Moonlight repository..."
+    print_warning "This will download and execute a setup script from Cloudsmith"
+    print_warning "Please review the script at: https://dl.cloudsmith.io/public/moonlight-game-streaming/moonlight-qt/setup.deb.sh"
+    read -r -p "Continue with repository setup? (y/n): " continue_repo
+    if [ "$continue_repo" != "y" ]; then
+        print_info "Repository setup cancelled"
+        return 1
+    fi
+    
     curl -1sLf 'https://dl.cloudsmith.io/public/moonlight-game-streaming/moonlight-qt/setup.deb.sh' | distro=raspbian codename=$(lsb_release -cs) sudo -E bash
     
     # Install Moonlight Qt
@@ -87,7 +102,7 @@ configure_audio_lite() {
     print_info "Configuring audio for Raspberry Pi OS Lite..."
     
     # Check if PulseAudio is already installed
-    if dpkg -l | grep -q pulseaudio; then
+    if dpkg -l pulseaudio 2>/dev/null | grep -q '^ii'; then
         print_info "PulseAudio is already installed"
     else
         print_info "Installing PulseAudio..."
@@ -115,18 +130,31 @@ fix_osmc_permissions() {
 fix_4k_gpu_memory() {
     print_info "Increasing GPU memory for 4K 60 Hz support..."
     
+    # Detect config file location (older vs newer Raspberry Pi OS)
+    config_file=""
+    if [ -f /boot/firmware/config.txt ]; then
+        config_file="/boot/firmware/config.txt"
+    elif [ -f /boot/config.txt ]; then
+        config_file="/boot/config.txt"
+    else
+        print_error "Cannot find config.txt in /boot or /boot/firmware"
+        return 1
+    fi
+    
+    print_info "Using config file: $config_file"
+    
     # Check if gpu_mem is already set
-    if grep -q "^gpu_mem=" /boot/config.txt; then
-        print_warning "gpu_mem is already configured in /boot/config.txt"
+    if grep -q "^gpu_mem=" "$config_file"; then
+        print_warning "gpu_mem is already configured in $config_file"
         print_info "Current setting:"
-        grep "^gpu_mem=" /boot/config.txt
+        grep "^gpu_mem=" "$config_file"
         read -r -p "Do you want to update it to 128? (y/n): " update_gpu
         if [ "$update_gpu" = "y" ]; then
-            sudo sed -i 's/^gpu_mem=.*/gpu_mem=128/' /boot/config.txt
+            sudo sed -i 's/^gpu_mem=.*/gpu_mem=128/' "$config_file"
             print_success "GPU memory updated to 128MB"
         fi
     else
-        echo "gpu_mem=128" | sudo tee -a /boot/config.txt
+        echo "gpu_mem=128" | sudo tee -a "$config_file"
         print_success "GPU memory set to 128MB"
     fi
     
