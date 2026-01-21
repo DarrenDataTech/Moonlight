@@ -47,6 +47,7 @@ check_raspberry_pi() {
 # Function to check OS version
 check_os_version() {
     if [ -f /etc/os-release ]; then
+        # shellcheck source=/dev/null
         . /etc/os-release
         print_info "Detected OS: $PRETTY_NAME"
         
@@ -75,7 +76,8 @@ install_moonlight() {
     print_warning "Downloading and executing repository setup script from Cloudsmith..."
     
     # Download the script first
-    local TEMP_SCRIPT=$(mktemp)
+    local TEMP_SCRIPT
+    TEMP_SCRIPT=$(mktemp)
     if ! curl -1sLf 'https://dl.cloudsmith.io/public/moonlight-game-streaming/moonlight-qt/setup.deb.sh' -o "$TEMP_SCRIPT"; then
         print_error "Failed to download repository setup script"
         rm -f "$TEMP_SCRIPT"
@@ -129,14 +131,14 @@ fix_input_permissions() {
     print_info "Checking input device permissions..."
     
     # Check if user is in input group
-    if ! groups $USER | grep -q '\binput\b'; then
+    if ! groups "$USER" | grep -q '\binput\b'; then
         print_warning "User is not in the 'input' group."
         print_info "This is required for extended DS4/DS5 controller features."
         read -p "Do you want to add your user to the input group? (Y/n): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             print_info "Adding user to input group..."
-            sudo usermod -a -G input $USER
+            sudo usermod -a -G input "$USER"
             print_success "User added to input group"
             print_warning "You need to reboot for this change to take effect"
         fi
@@ -164,7 +166,8 @@ configure_gpu_memory() {
         fi
         
         # Check if gpu_mem is already set to 128 or higher
-        local CURRENT_GPU_MEM=$(grep "^gpu_mem=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2)
+        local CURRENT_GPU_MEM
+        CURRENT_GPU_MEM=$(grep "^gpu_mem=" "$CONFIG_FILE" 2>/dev/null | cut -d'=' -f2)
         if [ -n "$CURRENT_GPU_MEM" ] && [ "$CURRENT_GPU_MEM" -ge 128 ] 2>/dev/null; then
             print_info "GPU memory is already configured to ${CURRENT_GPU_MEM}MB"
         else
